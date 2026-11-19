@@ -24,6 +24,7 @@
     padding: 10px 20px; font-size: 15px; font-weight: bold; cursor: pointer;
   }
   button:hover { background: #9f8b76; }
+  button:disabled { background: #cdc1b4; cursor: default; }
   #board {
     display: grid; grid-template-columns: repeat(4, 90px); grid-template-rows: repeat(4, 90px);
     gap: 10px; background: #bbada0; border-radius: 8px; padding: 10px;
@@ -50,17 +51,25 @@
 <div class="bar">
   <div class="score"><small>Score</small><span id="score">0</span></div>
   <div class="score"><small>Best</small><span id="best">0</span></div>
+  <button id="undo" disabled>撤销</button>
   <button id="restart">新游戏</button>
 </div>
 <div id="board"></div>
 <div id="overlay"></div>
-<p class="hint">方向键 / WASD / 滑动。合并相同数字，凑出 2048。</p>
+<p class="hint">方向键 / WASD / 滑动。合并相同数字，凑出 2048。走错了按 Z 撤销。</p>
 
 <script>
 const N = 4;
-let grid, score, best = +localStorage.getItem('best2048') || 0, over = false;
+const BEST_KEY = 'best2048';
+const STATE_KEY = 'state2048';
+const UNDO_LIMIT = 20; // 最多回退 20 步，避免 history 无限增长
+
+let grid, score, over = false, best = +localStorage.getItem(BEST_KEY) || 0;
+let history = []; // [{ grid, score }]，每次有效移动前压栈
 const board = document.getElementById('board');
 const cells = [];
+const overlay = document.getElementById('overlay');
+const undoBtn = document.getElementById('undo');
 
 for (let i = 0; i < N * N; i++) {
   const c = document.createElement('div');
@@ -92,6 +101,26 @@ function render() {
   });
   document.getElementById('score').textContent = score;
   document.getElementById('best').textContent = best;
+  undoBtn.disabled = history.length === 0;
+}
+
+// ---- 存档：刷新/关掉页面后接着玩 ----
+
+function saveState() {
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify({ grid, score }));
+  } catch (e) { /* 隐私模式下 localStorage 可能不可写，忽略 */ }
+}
+
+function restoreState() {
+  let s;
+  try { s = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch (e) { return false; }
+  if (!s || !Array.isArray(s.grid) || s.grid.length !== N * N) return false;
+  if (!s.grid.every(v => Number.isInteger(v) && v >= 0)) return false;
+  grid = s.grid;
+  score = Number.isInteger(s.score) ? s.score : 0;
+  over = false;
+  return true;
 }
 
 // Slide one row toward index 0; returns [newRow, gained, moved].
@@ -113,6 +142,7 @@ function slide(row) {
 
 function move(dir) { // dir: 0=left 1=up 2=right 3=down
   if (over) return;
+  const before = { grid: grid.slice(), score };
   let moved = false, gained = 0;
   for (let line = 0; line < N; line++) {
     let row = [];
@@ -129,12 +159,26 @@ function move(dir) { // dir: 0=left 1=up 2=right 3=down
       else grid[k * N + line] = out[k];
     }
   }
-  if (!moved) return;
+  if (!moved) return; // 无效移动不改盘面，也不记入撤销栈
+  history.push(before);
+  if (history.length > UNDO_LIMIT) history.shift();
   score += gained;
-  if (score > best) { best = score; localStorage.setItem('best2048', best); }
+  if (score > best) { best = score; localStorage.setItem(BEST_KEY, best); }
   spawn();
   render();
   checkEnd();
+  saveState();
+}
+
+function undo() {
+  const prev = history.pop();
+  if (!prev) return;
+  grid = prev.grid.slice();
+  score = prev.score;
+  over = false;
+  overlay.style.display = 'none';
+  render();
+  saveState();
 }
 
 function canMove() {
@@ -151,18 +195,19 @@ function checkEnd() {
   const won = grid.includes(2048), dead = !canMove();
   if (won || dead) {
     over = dead; // win lets you keep playing
-    const o = document.getElementById('overlay');
-    o.style.display = 'block';
-    o.textContent = dead ? '游戏结束 — 点"新游戏"重来' : '你凑出 2048 了！还能继续刷分';
+    overlay.style.display = 'block';
+    overlay.textContent = dead ? '游戏结束 — 点"新游戏"重来，或按 Z 撤销最后一步' : '你凑出 2048 了！还能继续刷分';
   }
 }
 
 function reset() {
   grid = new Array(N * N).fill(0);
   score = 0; over = false;
-  document.getElementById('overlay').style.display = 'none';
+  history = [];
+  overlay.style.display = 'none';
   spawn(); spawn();
   render();
+  saveState();
 }
 
 const KEYS = {
@@ -171,8 +216,10 @@ const KEYS = {
 };
 document.addEventListener('keydown', e => {
   if (e.key in KEYS) { e.preventDefault(); move(KEYS[e.key]); }
+  else if (e.key === 'z' || e.key === 'Z' || e.key === 'Backspace') { e.preventDefault(); undo(); }
 });
 document.getElementById('restart').addEventListener('click', reset);
+undoBtn.addEventListener('click', undo);
 
 // Touch swipe.
 let sx = 0, sy = 0;
@@ -183,7 +230,7 @@ board.addEventListener('touchend', e => {
   move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 2 : 0) : (dy > 0 ? 3 : 1));
 });
 
-reset();
+if (restoreState()) { render(); checkEnd(); } else reset();
 </script>
 </body>
 </html>
