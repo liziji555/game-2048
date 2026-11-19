@@ -1,11 +1,6 @@
-<<<<<<< HEAD
-# game-2048
-Classic 2048 puzzle game in a single index.html — zero dependencies, keyboard + touch, opens in any browser.
-||||||| (empty tree)
-=======
 # game-2048
 
-经典 2048 小游戏，单文件实现——零依赖、零构建，`index.html` 双击就能玩。
+经典 2048 小游戏。原生 JS 模块化实现，Vite 构建。
 
 ## 玩法
 
@@ -14,22 +9,32 @@ Classic 2048 puzzle game in a single index.html — zero dependencies, keyboard 
 ## 运行
 
 ```bash
-# 直接打开
-open index.html          # macOS
-xdg-open index.html      # Linux
+npm install
+npm run dev       # http://localhost:5173
 
-# 或起个本地服务
-python3 -m http.server 8000   # 然后访问 http://localhost:8000
+# 或不用 Vite，任意静态服务器都行（ES module 需要 http 协议）
+python3 -m http.server 8000   # http://localhost:8000
 ```
 
-## 实现
+## 结构
 
-- 单个 `index.html`：HTML + CSS + 原生 JS，无任何依赖
-- 4×4 网格，每次有效移动后按 90%/10% 概率生成 2/4
-- 得分 + 最高分（localStorage 持久化）
-- 凑出 2048 后可继续刷分，无路可走时判负
+```
+index.html        页面壳 + 样式
+src/main.js       装配：输入 -> 移动 -> 渲染 -> 持久化
+src/game.js       核心逻辑：矩阵状态、滑动合并、生成、胜负判定（纯逻辑无 DOM）
+src/renderer.js   Canvas 渲染层
+src/storage.js    localStorage 数据层：最高分、背包、技能冷却
+```
+
+拆开是为了后面加 roguelike 词条：背包和冷却的数据层已经封装好，
+逻辑层不碰 DOM，渲染层不碰状态。
+
+## Roadmap
+
+- 肉鸽词条系统：技能触发 buff、回合冷却
+- 背包 UI 面板
+- 词条效果挂在 move 前后的钩子
 
 ## License
 
 MIT
->>>>>>> a2126f0 (Initial commit: single-file 2048 game)
